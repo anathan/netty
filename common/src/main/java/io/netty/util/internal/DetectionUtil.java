@@ -15,12 +15,8 @@
  */
 package io.netty.util.internal;
 
-import sun.misc.Cleaner;
-
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.nio.ByteBuffer;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
@@ -89,15 +85,14 @@ public final class DetectionUtil {
 
         boolean canFreeDirectBuffer = false;
 
-        try {
-            ByteBuffer direct = ByteBuffer.allocateDirect(1);
-            Field cleanerField = direct.getClass().getDeclaredField("cleaner");
-            cleanerField.setAccessible(true);
-            Cleaner cleaner = (Cleaner) cleanerField.get(direct);
-            cleaner.clean();
-            canFreeDirectBuffer = true;
-        } catch (Throwable t) {
-            // Ignore.
+        // Only try to use DirectByteBufUtil if it is not android as otherwise it will give errors because
+        // it try to access sun.misc.Cleaner
+        if (!isAndroid()) {
+            try {
+                canFreeDirectBuffer = DirectByteBufUtil.canFreeDirect();
+            } catch (Throwable t) {
+                // Ignore.
+            }
         }
 
         CAN_FREE_DIRECT_BUFFER = canFreeDirectBuffer;
@@ -180,6 +175,9 @@ public final class DetectionUtil {
 
     private static int javaVersion0() {
         // Android
+        if (isAndroid()) {
+            return 5;
+        }
         try {
             Class.forName("android.app.Application", false, ClassLoader.getSystemClassLoader());
             return 6;
@@ -197,6 +195,17 @@ public final class DetectionUtil {
         }
 
         return 6;
+    }
+
+    private static boolean isAndroid() {
+        // Android
+        try {
+            Class.forName("android.app.Application", false, ClassLoader.getSystemClassLoader());
+            return true;
+        } catch (Exception e) {
+            // Ignore
+        }
+        return false;
     }
 
     private DetectionUtil() {
